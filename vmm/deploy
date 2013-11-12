@@ -1,0 +1,128 @@
+#!/bin/bash
+#===============================================================================
+# vim: softtabstop=4 shiftwidth=4 expandtab fenc=utf-8 spell spelllang=en cc=81
+#===============================================================================
+
+# ---------------------------------------------------------------------------- #
+# Copyright 2013, databus.pro                                                  #
+# Author: Valentin Bud                                                         #
+#                                                                              #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may      #
+# not use this file except in compliance with the License. You may obtain      #
+# a copy of the License at                                                     #
+#                                                                              #
+# http://www.apache.org/licenses/LICENSE-2.0                                   #
+#                                                                              #
+# Unless required by applicable law or agreed to in writing, software          #
+# distributed under the License is distributed on an "AS IS" BASIS,            #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     #
+# See the License for the specific language governing permissions and          #
+# limitations under the License.                                               #
+# ---------------------------------------------------------------------------- #
+
+source $(dirname $0)/lxcrc
+source $(dirname $0)/../../scripts_common.sh
+
+DRIVER_PATH=$(dirname $0)
+
+domain=$1
+
+mkdir -p `dirname $domain`
+# cat > $domain
+
+# ------------------------------------------------------------------------------
+# XPATH 
+# ------------------------------------------------------------------------------
+
+XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
+
+unset i XPATH_ELEMENTS
+
+while IFS= read -r -d '' element; do
+    XPATH_ELEMENTS[i++]="$element"
+done < <($XPATH     /VM/ID \
+                    /VM/TEMPLATE/DISK/SOURCE \
+                    /VM/TEMPLATE/CONTEXT/HOSTNAME \
+                    /VM/TEMPLATE/MEMORY \
+                    /VM/TEMPLATE/NIC/BRIDGE \
+                    /VM/TEMPLATE/NIC/MAC \
+                    /VM/TEMPLATE/NIC/IP)
+
+VM_ID="${XPATH_ELEMENTS[0]}"
+DISK_SOURCE="${XPATH_ELEMENTS[1]}"
+HOSTNAME="${XPATH_ELEMENTS[2]}"
+MEMORY="${XPATH_ELEMENTS[3]}"
+NIC_BRIDGE="${XPATH_ELEMENTS[4]}"
+NIC_MAC="${XPATH_ELEMENTS[5]}"
+NIC_IP="${XPATH_ELEMENTS[6]}"
+
+# ------------------------------------------------------------------------------
+# ROOTFS
+# ------------------------------------------------------------------------------
+
+DISK_SOURCE="${DISK_SOURCE/#*:/}"
+VG="${DISK_SOURCE/%.*}"
+LV="${DISK_SOURCE/#*.}"
+ROOTFS="/dev/${VG}/${LV}"
+
+# ------------------------------------------------------------------------------
+# Create $LXC_DIRECTORY/one-$VM_ID
+# ------------------------------------------------------------------------------
+
+mkdir -p ${LXC_DIRECTORY}/one-${VM_ID}
+VM_LXC_DIRECTORY=${LXC_DIRECTORY}/one-${VM_ID}
+
+
+# ------------------------------------------------------------------------------
+# Generate LXC config
+# ------------------------------------------------------------------------------
+
+cat >> ${VM_LXC_DIRECTORY}/config <<EOF
+lxc.tty = 4
+lxc.pts = 1024
+lxc.rootfs = ${ROOTFS}
+
+lxc.cgroup.devices.deny = a
+
+# /dev/null and zero
+lxc.cgroup.devices.allow = c 1:3 rwm
+lxc.cgroup.devices.allow = c 1:5 rwm
+
+# consoles
+lxc.cgroup.devices.allow = c 5:1 rwm
+lxc.cgroup.devices.allow = c 5:0 rwm
+lxc.cgroup.devices.allow = c 4:0 rwm
+lxc.cgroup.devices.allow = c 4:1 rwm
+
+# /dev/{,u}random
+lxc.cgroup.devices.allow = c 1:9 rwm
+lxc.cgroup.devices.allow = c 1:8 rwm
+lxc.cgroup.devices.allow = c 136:* rwm
+lxc.cgroup.devices.allow = c 5:2 rwm
+
+# rtc
+lxc.cgroup.devices.allow = c 254:0 rwm
+
+# memory
+lxc.cgroup.memory.limit_in_bytes = ${MEMORY}M
+
+# mounts point
+lxc.mount.entry=proc /var/lib/lxc/one-${VM_ID}/rootfs/proc proc nodev,noexec,nosuid 0 0
+lxc.mount.entry=devpts /var/lib/lxc/one-${VM_ID}/rootfs/dev/pts devpts defaults 0 0
+lxc.mount.entry=sysfs /var/lib/lxc/one-${VM_ID}/rootfs/sys sysfs defaults  0 0
+
+# networking
+lxc.utsname = ${HOSTAME}
+lxc.network.type = veth
+lxc.network.veth.pair = veth${VM_ID}
+lxc.network.flags = up
+lxc.network.link = ${NIC_BRIDGE}
+lxc.network.ipv4 = ${NIC_IP}/24
+lxc.network.hwaddr = ${NIC_MAC}
+EOF
+
+# ------------------------------------------------------------------------------
+# Start LXC Container
+# ------------------------------------------------------------------------------
+
+sudo lxc-start -n one-${VM_ID} -d -f ${VM_LXC_DIRECTORY}/config

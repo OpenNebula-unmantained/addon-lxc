@@ -1,0 +1,71 @@
+#!/bin/bash
+#===============================================================================
+# vim: softtabstop=4 shiftwidth=4 expandtab fenc=utf-8 spell spelllang=en cc=81
+#===============================================================================
+
+# ---------------------------------------------------------------------------- #
+# Copyright 2013, databus.pro                                                  #
+# Author: Valentin Bud                                                         #
+#                                                                              #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may      #
+# not use this file except in compliance with the License. You may obtain      #
+# a copy of the License at                                                     #
+#                                                                              #
+# http://www.apache.org/licenses/LICENSE-2.0                                   #
+#                                                                              #
+# Unless required by applicable law or agreed to in writing, software          #
+# distributed under the License is distributed on an "AS IS" BASIS,            #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     #
+# See the License for the specific language governing permissions and          #
+# limitations under the License.                                               #
+# ---------------------------------------------------------------------------- #
+
+source $(dirname $0)/lxcrc
+source $(dirname $0)/../../scripts_common.sh
+
+# ------------------------------------------------------------------------------ 
+# Arguments
+# ------------------------------------------------------------------------------ 
+
+DEPLOY_ID=$3
+
+# ------------------------------------------------------------------------------ 
+# STATE
+# ------------------------------------------------------------------------------ 
+
+LXC_INFO_STATE=`sudo lxc-info -n one-${DEPLOY_ID} | grep state | awk ' { print $2 } '`
+
+if [ "${LXC_INFO_STATE}" = RUNNING ]
+then
+    _STATE=a
+else
+    _STATE=e
+fi
+
+# ------------------------------------------------------------------------------ 
+# USEDMEMORY
+# ------------------------------------------------------------------------------ 
+
+_USEDMEMORY=`sudo lxc-cgroup -n one-${DEPLOY_ID} memory.usage_in_bytes`
+let "USEDMEMORY = ${_USEDMEMORY} / 1024"
+
+# ------------------------------------------------------------------------------ 
+# NETTX NETRX
+# ------------------------------------------------------------------------------ 
+
+read _NETRX _NETTX <<< `/sbin/ifconfig veth${DEPLOY_ID} | grep "RX bytes" | awk ' { print $2 " " $6 } '` 
+
+NETTX=${_NETRX/*:}
+NETRX=${_NETTX/*:}
+
+# ------------------------------------------------------------------------------ 
+# TODO: CPU
+# ------------------------------------------------------------------------------ 
+
+LXC_CONTAINER_PID=`lxc-info -n one-${DEPLOY_ID} | grep pid | awk ' { print $2 } '`
+
+# ------------------------------------------------------------------------------ 
+# MONITORING DATA
+# ------------------------------------------------------------------------------ 
+
+echo "STATE=${_STATE} USEDCPU=1 USEDMEMORY=${USEDMEMORY} NETRX=${NETRX} NETTX=${NETTX}"
