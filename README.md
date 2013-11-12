@@ -18,11 +18,16 @@ More info:
 
 ## Compatibility
 
-This add-on is compatible with OpenNebula x.y.
+This add-on is compatible with OpenNebula 4.2.
 
 ## Features
 
 ## Limitations
+
+* Currently developed and tested on Debian Wheezy only
+* Only works with the [LVM Datastore](http://opennebula.org/documentation:rel4.2:lvm_ds)
+* The poll driver action doesn't return USEDCPU
+* restore and save driver actions do nothing
 
 ## Requirements
 
