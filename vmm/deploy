@@ -1,40 +1,43 @@
-#!/bin/bash
-#===============================================================================
-# vim: softtabstop=4 shiftwidth=4 expandtab fenc=utf-8 spell spelllang=en cc=81
-#===============================================================================
+#!/usr/bin/env ruby
 
-# ---------------------------------------------------------------------------- #
-# Copyright 2013, databus.pro                                                  #
-# Author: Valentin Bud                                                         #
-#                                                                              #
-# Licensed under the Apache License, Version 2.0 (the "License"); you may      #
-# not use this file except in compliance with the License. You may obtain      #
-# a copy of the License at                                                     #
-#                                                                              #
-# http://www.apache.org/licenses/LICENSE-2.0                                   #
-#                                                                              #
-# Unless required by applicable law or agreed to in writing, software          #
-# distributed under the License is distributed on an "AS IS" BASIS,            #
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     #
-# See the License for the specific language governing permissions and          #
-# limitations under the License.                                               #
-# ---------------------------------------------------------------------------- #
+# -------------------------------------------------------------------------
+# Copyright 2002-2013, OpenNebula Project (OpenNebula.org), C12G Labs 
+# Author: Javier Fontan
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# --------------------------------------------------------------------------
 
-source $(dirname $0)/lxcrc
-source $(dirname $0)/../../scripts_common.sh
+require 'pp'
+require 'fileutils'
+require 'rexml/document'
 
-DRIVER_PATH=$(dirname $0)
+#source $(dirname $0)/lxcrc
+#source $(dirname $0)/../../scripts_common.sh
 
-domain=$1
+DRIVER_PATH=File.dirname($0)
 
-mkdir -p `dirname $domain`
+domain=ARGV[0]
+
+FileUtils.mkdir_p File.dirname domain
 # cat > $domain
 
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 # XPATH 
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 
 XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
+
+=begin
 
 unset i XPATH_ELEMENTS
 
@@ -47,35 +50,45 @@ done < <($XPATH     /VM/ID \
                     /VM/TEMPLATE/NIC/BRIDGE \
                     /VM/TEMPLATE/NIC/MAC \
                     /VM/TEMPLATE/NIC/IP)
+=end
 
-VM_ID="${XPATH_ELEMENTS[0]}"
-DISK_SOURCE="${XPATH_ELEMENTS[1]}"
-HOSTNAME="${XPATH_ELEMENTS[2]}"
+doc=REXML::Document.new(STDIN.read).root
+
+VM_ID=doc.elements['/VM/ID'].text
+DISK_SOURCE=doc.elements['/VM/TEMPLATE/DISK/SOURCE'].text
+HOSTNAME=doc.elements['/VM/TEMPLATE/CONTEXT/HOSTNAME'].text
+
+pp [VM_ID, DISK_SOURCE, HOSTNAME]
+
+exit 0
+
+__END__
+
 MEMORY="${XPATH_ELEMENTS[3]}"
 NIC_BRIDGE="${XPATH_ELEMENTS[4]}"
 NIC_MAC="${XPATH_ELEMENTS[5]}"
 NIC_IP="${XPATH_ELEMENTS[6]}"
 
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 # ROOTFS
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 
 DISK_SOURCE="${DISK_SOURCE/#*:/}"
 VG="${DISK_SOURCE/%.*}"
 LV="${DISK_SOURCE/#*.}"
 ROOTFS="/dev/${VG}/${LV}"
 
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 # Create $LXC_DIRECTORY/one-$VM_ID
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 
-mkdir -p ${LXC_DIRECTORY}/one-${VM_ID}
+FileUtils.mkdir_p ${LXC_DIRECTORY}/one-${VM_ID}
 VM_LXC_DIRECTORY=${LXC_DIRECTORY}/one-${VM_ID}
 
 
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 # Generate LXC config
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 
 cat >> ${VM_LXC_DIRECTORY}/config <<EOF
 lxc.tty = 4
@@ -121,8 +134,9 @@ lxc.network.ipv4 = ${NIC_IP}/24
 lxc.network.hwaddr = ${NIC_MAC}
 EOF
 
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 # Start LXC Container
-# ------------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 
 sudo lxc-start -n one-${VM_ID} -d -f ${VM_LXC_DIRECTORY}/config
+
